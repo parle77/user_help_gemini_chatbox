@@ -330,7 +330,7 @@
 const CONFIG = {
     GEMINI_API_KEY: 'AIzaSyDE5k28i_6PKR_g93EbV8YUNwNf10d9PPs',
     SUPABASE_URL: 'https://nvnopwfkbkslvrvvvjij.supabase.co',
-    SUPABASE_ANON_KEY: 'PLACEHOLDER_SUPABASE_ANON_KEY', // match workflow
+    SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52bm9wd2ZrYmtzbHZydnZ2amlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk3NDUwNjUsImV4cCI6MjA1NTMyMTA2NX0.mdphOoFUFujVx2Z7YgbAa9HggJHFVuthjRy9DI9zZZ0', // match workflow
     BOT_NAME: 'Product Helper',
     BOT_AVATAR: '🛒'
 };
@@ -364,7 +364,7 @@ async function fetchProductData(barcode) {
 
     if (!CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY ||
         CONFIG.SUPABASE_URL === 'https://nvnopwfkbkslvrvvvjij.supabase.co' ||
-        CONFIG.SUPABASE_ANON_KEY === 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im52bm9wd2ZrYmtzbHZydnZ2amlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzk3NDUwNjUsImV4cCI6MjA1NTMyMTA2NX0.mdphOoFUFujVx2Z7YgbAa9HggJHFVuthjRy9DI9zZZ0') {
+        CONFIG.SUPABASE_ANON_KEY === 'PLACEHOLDER_SUPABASE_KEY') {
         throw new Error('Supabase not configured');
     }
 
