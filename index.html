@@ -327,236 +327,267 @@
             </div>
         </div>
 <script>
-    // --- CONFIGURATION ---
-    const CONFIG = {
-        GEMINI_API_KEY: 'PLACEHOLDER_GEMINI_KEY',
-        SUPABASE_URL: 'PLACEHOLDER_SUPABASE_URL',
-        SUPABASE_ANON_KEY: 'PLACEHOLDER_SUPABASE_KEY',
-        BOT_NAME: 'Product Helper',
-        BOT_AVATAR: '🛒'
-    };
+const CONFIG = {
+    GEMINI_API_KEY: 'PLACEHOLDER_GEMINI_KEY',
+    SUPABASE_URL: 'PLACEHOLDER_SUPABASE_URL',
+    SUPABASE_ANON_KEY: 'PLACEHOLDER_SUPABASE_KEY',
+    BOT_NAME: 'Product Helper',
+    BOT_AVATAR: '🛒'
+};
 
-    // --- STATE VARIABLES ---
-    let currentProduct = null;
-    let chatHistory = [];
-    const userId = generateId('user');
-    const sessionId = generateId('session');
+let currentProduct = null;
+let chatHistory = [];
+let userId = generateUserId();
+let sessionId = generateSessionId();
 
-    // --- UTILITIES ---
-    function generateId(prefix) {
-        return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+function generateUserId() {
+    return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+function generateSessionId() {
+    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+function formatTime(date) {
+    return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }).format(date);
+}
+
+// Get barcode from URL
+function getBarcodeFromUrl() {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('barcode');
+}
+
+// Fetch product by barcode from Supabase
+async function fetchProductData(barcode) {
+    if (!barcode) throw new Error('No barcode provided');
+
+    if (!CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY ||
+        CONFIG.SUPABASE_URL === 'PLACEHOLDER_SUPABASE_URL' ||
+        CONFIG.SUPABASE_ANON_KEY === 'PLACEHOLDER_SUPABASE_KEY') {
+        throw new Error('Supabase not configured');
     }
 
-    function formatTime(date) {
-        return new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }).format(date);
-    }
+    const queryUrl = `${CONFIG.SUPABASE_URL}/rest/v1/foods_table?barcode=eq.${barcode}&select=*`;
 
-    function getProductIdFromUrl() {
-        const params = new URLSearchParams(window.location.search);
-        return params.get('productId') || params.get('id');
-    }
-
-    function showError(message) {
-        const errorDiv = document.getElementById('errorMessage');
-        errorDiv.textContent = message;
-        errorDiv.classList.add('active');
-        setTimeout(() => errorDiv.classList.remove('active'), 5000);
-    }
-
-    function toggleTyping(show) {
-        const typing = document.getElementById('typingIndicator');
-        typing.classList.toggle('active', show);
-        if (show) document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
-    }
-
-    // --- FETCH PRODUCT DATA FROM SUPABASE ---
-    async function fetchProductData(productId) {
-        if (!productId) throw new Error('No product ID provided in URL.');
-
-        const url = `${CONFIG.SUPABASE_URL}/rest/v1/foods_table?id=eq.${productId}&select=*`;
-        const headers = {
-            'apikey': CONFIG.SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
-        };
-
-        const res = await fetch(url, { headers });
-        if (!res.ok) throw new Error(`Failed to fetch product data: ${res.status}`);
-        const data = await res.json();
-        if (!data.length) throw new Error('Product not found');
-        return data[0];
-    }
-
-    // --- DISPLAY PRODUCT CARD ---
-    function displayProductInfo(product) {
-        const chatMessages = document.getElementById('chatMessages');
-        const productIndicator = document.getElementById('productIndicator');
-        productIndicator.textContent = product.name || 'Product';
-
-        const cardDiv = document.createElement('div');
-        cardDiv.className = 'message bot';
-        cardDiv.innerHTML = `
-            <div class="message-avatar">🛒</div>
-            <div class="message-wrapper">
-                <div class="product-card">
-                    <h4>${product.name || 'Product'}</h4>
-                    ${product.brand ? `<p><strong>Brand:</strong> ${product.brand}</p>` : ''}
-                    ${product.ingredients ? `<p><strong>Ingredients:</strong> ${product.ingredients}</p>` : ''}
-                    ${product.allergens ? `<p><strong>Allergens:</strong> ${product.allergens}</p>` : ''}
-                    <div class="quick-actions">
-                        <button class="quick-action" onclick="askQuestion('What are the main ingredients?')">Ingredients</button>
-                        <button class="quick-action" onclick="askQuestion('Are there any allergens?')">Allergens</button>
-                        <button class="quick-action" onclick="askQuestion('What is the nutritional information?')">Nutrition</button>
-                        <button class="quick-action" onclick="askQuestion('How should I use this product?')">Usage</button>
-                        <button class="quick-action" onclick="askQuestion('Is this product suitable for my diet?')">Diet Info</button>
-                        <button class="quick-action" onclick="openSuggestionEmail()">💡 Suggestion</button>
-                    </div>
-                </div>
-                <div class="message-time">${formatTime(new Date())}</div>
-            </div>
-        `;
-        document.getElementById('productLoader').classList.remove('active');
-        chatMessages.appendChild(cardDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    // --- SUGGESTION BUTTON ---
-    function openSuggestionEmail() {
-        if (!currentProduct) return;
-        const subject = encodeURIComponent(`Suggestion for ${currentProduct.name}`);
-        const body = encodeURIComponent(
-`Hi Gutty team,
-
-I have a suggestion for this product:
-
-Product Name: ${currentProduct.name}
-Barcode: ${currentProduct.barcode || 'N/A'}
-Brand: ${currentProduct.brand || 'N/A'}
-Ingredients: ${currentProduct.ingredients || 'N/A'}
-
-My Suggestion:
-
-
-Best regards,
-User ID: ${userId}`
-        );
-        window.open(`mailto:hello@guttyapp.com?subject=${subject}&body=${body}`, '_blank');
-    }
-
-    // --- CHAT FUNCTIONS ---
-    function addMessageToUI(message, sender) {
-        const chatMessages = document.getElementById('chatMessages');
-        const div = document.createElement('div');
-        div.className = `message ${sender}`;
-
-        if (sender === 'bot') {
-            const avatarDiv = document.createElement('div');
-            avatarDiv.className = 'message-avatar';
-            avatarDiv.textContent = CONFIG.BOT_AVATAR;
-            div.appendChild(avatarDiv);
-        }
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'message-wrapper';
-
-        const content = document.createElement('div');
-        content.className = 'message-content';
-        content.innerHTML = message.replace(/\n/g, '<br>');
-
-        const time = document.createElement('div');
-        time.className = 'message-time';
-        time.textContent = formatTime(new Date());
-
-        wrapper.appendChild(content);
-        wrapper.appendChild(time);
-        div.appendChild(wrapper);
-        chatMessages.appendChild(div);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    async function callGeminiAPI(userMessage) {
-        if (!CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY === 'PLACEHOLDER_GEMINI_KEY') {
-            return "I'm not configured to answer right now. Please contact support for assistance.";
-        }
-
-        const systemPrompt = `You are a helpful product assistant. Answer only based on the product below:
-
-Name: ${currentProduct.name || 'N/A'}
-Brand: ${currentProduct.brand || 'N/A'}
-Ingredients: ${currentProduct.ingredients || 'N/A'}
-Allergens: ${currentProduct.allergens || 'N/A'}
-`;
-
-        const payload = {
-            contents: [{ role: 'user', parts: [{ text: systemPrompt + '\nUser: ' + userMessage }] }],
-            generationConfig: { temperature: 0.3, topK: 40, topP: 0.8, maxOutputTokens: 1024 }
-        };
-
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+    try {
+        const res = await fetch(queryUrl, {
+            headers: {
+                'apikey': CONFIG.SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${CONFIG.SUPABASE_ANON_KEY}`
+            }
         });
 
-        if (!res.ok) throw new Error('Gemini API error');
+        if (!res.ok) throw new Error(`Failed to fetch product data: ${res.status}`);
+
         const data = await res.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, I couldn't process that. Contact support for help.";
+        if (data.length === 0) throw new Error('Product not found');
+
+        return data[0];
+    } catch (err) {
+        console.error('Error fetching product:', err);
+        throw err;
+    }
+}
+
+// Display product card
+function displayProductInfo(product) {
+    const chatMessages = document.getElementById('chatMessages');
+    const productIndicator = document.getElementById('productIndicator');
+
+    productIndicator.textContent = product.name || 'Product';
+
+    const productCard = document.createElement('div');
+    productCard.className = 'message bot';
+    productCard.innerHTML = `
+        <div class="message-avatar">🛒</div>
+        <div class="message-wrapper">
+            <div class="product-card">
+                <h4>${product.name || 'Product'}</h4>
+                ${product.description ? `<p><strong>Description:</strong> ${product.description}</p>` : ''}
+                ${product.brand ? `<p><strong>Brand:</strong> ${product.brand}</p>` : ''}
+                ${product.ingredients ? `<p><strong>Ingredients:</strong> ${product.ingredients}</p>` : ''}
+                ${product.allergens ? `<p><strong>Allergens:</strong> ${product.allergens}</p>` : ''}
+                <div class="quick-actions">
+                    <button class="quick-action" onclick="askQuestion('What are the main ingredients?')">Ingredients</button>
+                    <button class="quick-action" onclick="askQuestion('Are there any allergens?')">Allergens</button>
+                    <button class="quick-action" onclick="askQuestion('What is the nutritional information?')">Nutrition</button>
+                    <button class="quick-action" onclick="askQuestion('How should I use this product?')">Usage</button>
+                    <button class="quick-action" onclick="askQuestion('Is this product suitable for my diet?')">Diet Info</button>
+                </div>
+                <button class="contact-btn" onclick="sendSuggestionEmail()">💡 Send Suggestion</button>
+            </div>
+            <div class="message-time">${formatTime(new Date())}</div>
+        </div>
+    `;
+    document.getElementById('productLoader').classList.remove('active');
+    chatMessages.appendChild(productCard);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Send Suggestion Email
+function sendSuggestionEmail() {
+    if (!currentProduct) return;
+
+    const subject = encodeURIComponent(`Suggestion for ${currentProduct.name}`);
+    const body = encodeURIComponent(`Hi Gutty team,\n\nI have a suggestion for this product:\n\nProduct Name: ${currentProduct.name}\nBarcode: ${currentProduct.barcode}\nBrand: ${currentProduct.brand}\nIngredients: ${currentProduct.ingredients}\n\nMy Suggestion:\n\nBest regards,\n`);
+    
+    window.location.href = `mailto:hello@guttyapp.com?subject=${subject}&body=${body}`;
+}
+
+// Create system prompt for AI
+function createSystemPrompt(product) {
+    return `You are a helpful product assistant. Use product info to answer questions.
+
+PRODUCT INFO:
+- Name: ${product.name || 'N/A'}
+- Brand: ${product.brand || 'N/A'}
+- Ingredients: ${product.ingredients || 'N/A'}
+- Allergens: ${product.allergens || 'N/A'}
+- Description: ${product.description || 'N/A'}
+
+GUIDELINES:
+- Answer questions accurately using product info.
+- Suggest contacting support if info missing.`;
+}
+
+// Add message to chat
+function addMessageToUI(message, sender, timestamp = null) {
+    const chatMessages = document.getElementById('chatMessages');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `message ${sender}`;
+
+    if (sender === 'bot') {
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = CONFIG.BOT_AVATAR;
+        msgDiv.appendChild(avatar);
     }
 
-    async function sendMessage() {
-        const input = document.getElementById('chatInput');
-        const message = input.value.trim();
-        if (!message) return;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message-wrapper';
 
-        addMessageToUI(message, 'user');
-        input.value = '';
-        input.disabled = true;
-        document.getElementById('sendBtn').disabled = true;
+    const content = document.createElement('div');
+    content.className = 'message-content';
+    content.innerHTML = message.replace(/\n/g, '<br>');
 
-        toggleTyping(true);
-        try {
-            const botReply = await callGeminiAPI(message);
-            addMessageToUI(botReply, 'bot');
-        } catch (err) {
-            showError(err.message);
-        } finally {
-            toggleTyping(false);
-            input.disabled = false;
-            document.getElementById('sendBtn').disabled = false;
-            input.focus();
-        }
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'message-time';
+    timeDiv.textContent = formatTime(timestamp || new Date());
+
+    wrapper.appendChild(content);
+    wrapper.appendChild(timeDiv);
+    msgDiv.appendChild(wrapper);
+
+    chatMessages.appendChild(msgDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Toggle typing indicator
+function toggleTyping(show) {
+    document.getElementById('typingIndicator').classList.toggle('active', show);
+}
+
+// Show error
+function showError(message) {
+    const errorDiv = document.getElementById('errorMessage');
+    errorDiv.textContent = message;
+    errorDiv.classList.add('active');
+    setTimeout(() => errorDiv.classList.remove('active'), 5000);
+}
+
+// Call Gemini AI
+async function callGeminiAPI(userMessage) {
+    if (!CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY === 'PLACEHOLDER_GEMINI_KEY') {
+        return "I'm not configured to answer. Please contact support.";
     }
 
-    function askQuestion(question) {
-        const input = document.getElementById('chatInput');
-        input.value = question;
-        input.focus();
-        sendMessage();
-    }
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${CONFIG.GEMINI_API_KEY}`;
+    const systemPrompt = createSystemPrompt(currentProduct);
 
-    function handleKeyPress(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    }
+    const messages = chatHistory.length === 0
+        ? [{ role: 'user', parts: [{ text: systemPrompt + '\n\nUser: ' + userMessage }] }]
+        : [...chatHistory, { role: 'user', parts: [{ text: userMessage }] }];
 
-    // --- INITIALIZE ---
-    async function initializeChatbot() {
-        try {
-            const productId = getProductIdFromUrl();
-            currentProduct = await fetchProductData(productId);
-            displayProductInfo(currentProduct);
-        } catch (err) {
-            document.getElementById('productLoader').classList.remove('active');
-            document.getElementById('productIndicator').textContent = 'Product not found';
-            showError(err.message);
-        }
-    }
+    try {
+        const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: messages,
+                generationConfig: { temperature: 0.3, topK: 40, topP: 0.8, maxOutputTokens: 1024 }
+            })
+        });
 
-    // --- EVENT LISTENERS ---
-    document.getElementById('sendBtn').addEventListener('click', sendMessage);
-    document.getElementById('chatInput').addEventListener('keypress', handleKeyPress);
-    window.addEventListener('DOMContentLoaded', initializeChatbot);
+        if (!res.ok) throw new Error(`API request failed: ${res.status}`);
+        const data = await res.json();
+
+        if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+            const botResponse = data.candidates[0].content.parts[0].text;
+            chatHistory.push(
+                { role: 'user', parts: [{ text: userMessage }] },
+                { role: 'model', parts: [{ text: botResponse }] }
+            );
+            return botResponse;
+        } else throw new Error('Invalid response from API');
+    } catch (err) {
+        console.error('Gemini API error:', err);
+        return "I'm having trouble processing your question. Please try again or contact support.";
+    }
+}
+
+// Send message
+async function sendMessage() {
+    const input = document.getElementById('chatInput');
+    const message = input.value.trim();
+    if (!message) return;
+
+    addMessageToUI(message, 'user');
+    input.value = '';
+    toggleTyping(true);
+
+    try {
+        const botResponse = await callGeminiAPI(message);
+        toggleTyping(false);
+        addMessageToUI(botResponse, 'bot');
+    } catch (err) {
+        toggleTyping(false);
+        showError('Failed to get response.');
+    }
+}
+
+// Ask predefined question
+function askQuestion(question) {
+    document.getElementById('chatInput').value = question;
+    sendMessage();
+}
+
+// Handle enter key
+document.getElementById('chatInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+// Send button click
+document.getElementById('sendBtn').addEventListener('click', sendMessage);
+
+// Initialize chatbot
+async function initializeChatbot() {
+    try {
+        const barcode = getBarcodeFromUrl();
+        if (!barcode) throw new Error('No barcode in URL. Add ?barcode=PRODUCT_BARCODE');
+
+        currentProduct = await fetchProductData(barcode);
+        displayProductInfo(currentProduct);
+        console.log('✅ Product loaded:', currentProduct.name);
+    } catch (err) {
+        console.error(err);
+        document.getElementById('productLoader').classList.remove('active');
+        document.getElementById('productIndicator').textContent = 'Product not found';
+        showError(err.message);
+    }
+}
+
+window.addEventListener('DOMContentLoaded', initializeChatbot);
 </script>
 </body>
 </html>
