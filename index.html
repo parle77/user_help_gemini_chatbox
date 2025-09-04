@@ -359,9 +359,10 @@ function getBarcodeFromUrl() {
 }
 
 // Fetch product by barcode from Supabase
-async function fetchProductData(productId) {
-    if (!productId) {
-        throw new Error('No product ID (barcode) provided');
+// Fetch product by barcode from Supabase
+async function fetchProductData(barcode) {
+    if (!barcode) {
+        throw new Error('No barcode provided');
     }
 
     if (!CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY || 
@@ -372,7 +373,7 @@ async function fetchProductData(productId) {
 
     try {
         const response = await fetch(
-            `${CONFIG.SUPABASE_URL}/rest/v1/foods_table?barcode=eq.${productId}&select=*`,
+            `${CONFIG.SUPABASE_URL}/rest/v1/foods_table?barcode=eq.${barcode}&select=*`,
             {
                 headers: {
                     'apikey': CONFIG.SUPABASE_ANON_KEY,
