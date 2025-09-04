@@ -1,24 +1,38 @@
 name: Deploy Chatbot
-
 on:
   push:
     branches:
       - main
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code 
-        uses: actions/checkout@v3
-
+        uses: actions/checkout@v4
+      
       - name: Replace placeholders with secrets
         run: |
-          sed -i "s|PLACEHOLDER_GEMINI_KEY|${{ secrets.GEMINI_API_KEY }}|g" index.html
-          sed -i "s|PLACEHOLDER_SUPABASE_URL|${{ secrets.SUPABASE_URL }}|g" index.html
-          sed -i "s|PLACEHOLDER_SUPABASE_ANON_KEY|${{ secrets.SUPABASE_ANON_KEY }}|g" index.html
-
+          # Create a copy of index.html for deployment
+          cp index.html deploy.html
+          
+          # Replace placeholders in the deployment copy
+          sed -i "s|PLACEHOLDER_GEMINI_KEY|${{ secrets.GEMINI_API_KEY }}|g" deploy.html
+          sed -i "s|PLACEHOLDER_SUPABASE_URL|${{ secrets.SUPABASE_URL }}|g" deploy.html
+          sed -i "s|PLACEHOLDER_SUPABASE_ANON_KEY|${{ secrets.SUPABASE_ANON_KEY }}|g" deploy.html
+          
+          # Rename back to index.html for deployment
+          mv deploy.html index.html
+          
+          # Verify replacements worked (optional debug step)
+          echo "Checking if placeholders were replaced:"
+          if grep -q "PLACEHOLDER_" index.html; then
+            echo "❌ Some placeholders were not replaced!"
+            grep "PLACEHOLDER_" index.html
+            exit 1
+          else
+            echo "✅ All placeholders replaced successfully"
+          fi
+      
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
